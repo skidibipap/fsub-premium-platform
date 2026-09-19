@@ -1,11 +1,14 @@
 # Kymang/modules/billing.py
 # PRD v5.0 Modul 12: Telegram Stars (XTR) Billing & Subscription Engine
 
+from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 import logging
 
 from hydrogram import filters
-from hydrogram.types import LabeledPrice, Message, PreCheckoutQuery
+from hydrogram.types import Message
+import hydrogram.raw.functions.messages as raw_messages
+import hydrogram.raw.types as raw_types
 
 from Kymang import bot
 from Kymang.config import BOT_ID
@@ -13,6 +16,14 @@ from Kymang.modules.data import add_timer, mongodb
 
 logger = logging.getLogger("BillingStars")
 tx_db = mongodb.billing_transactions
+
+
+# ─── LabeledPrice stub (tidak tersedia di hydrogram.types) ───────────────────
+@dataclass
+class LabeledPrice:
+    """Minimal stub untuk Telegram Stars invoice price label."""
+    label: str
+    amount: int
 
 
 # ─── Command /subscribe untuk Pembayaran Via Telegram Stars (XTR) ─────────────
@@ -43,12 +54,20 @@ async def send_stars_invoice(c, m: Message):
         await m.reply(f"❌ **Gagal membuat invoice:** {e}")
 
 
-# ─── Handler Pre-Checkout Query ────────────────────────────────────────────────
+# ─── Handler Pre-Checkout Query (via raw update) ──────────────────────────────
 
-@bot.on_pre_checkout_query()
-async def pre_checkout_handler(c, query: PreCheckoutQuery):
+@bot.on_raw_update()
+async def pre_checkout_handler(c, update, users, chats):
     """Validasi pre-checkout dari Telegram sebelum pembayaran dieksekusi."""
-    await query.answer(ok=True)
+    if not isinstance(update, raw_types.UpdateBotPrecheckoutQuery):
+        return
+    await c.invoke(
+        raw_messages.SetBotPrecheckoutResults(
+            query_id=update.query_id,
+            success=True,
+            error=None,
+        )
+    )
 
 
 # ─── Handler Successful Payment ──────────────────────────────────────────────
